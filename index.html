@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Saint-Gobain Node Editor - Animated Messaging</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body { height:100%; margin:0; background:#0195D6; font-family:sans-serif; overflow:hidden;}
+    #root { height:100vh;}
+    .toolbar {
+      position:fixed; right:32px; bottom:32px; z-index:60; display:flex; flex-direction:row; gap:12px;
+      align-items:center;
+    }
+    .toolbar-btn {
+      background:#fff; border-radius:50%; border:none; width:60px; height:60px;
+      box-shadow:0 4px 24px #0003; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:background 0.15s, box-shadow 0.15s;
+      font-size:2.1em; position:relative;
+      padding:0;
+    }
+    .toolbar-btn.selected { background:#E83430; }
+    .toolbar-btn svg { width:32px; height:32px; fill:#E83430;}
+    .toolbar-btn.selected svg { fill:#fff;}
+    .toolbar-btn:disabled {opacity:0.5; pointer-events:none;}
+    .toolbar-btn .tooltip {
+      visibility: hidden;
+      background: #254a9a;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 4px 10px;
+      position: absolute;
+      z-index: 99;
+      bottom: 75px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size:1em;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .toolbar-btn:hover .tooltip { visibility: visible; opacity: 1;}
+    .add-menu {
+      position:absolute; bottom:70px; right:0; z-index:70; min-width:150px; background:#fff;
+      border-radius:10px; box-shadow:0 4px 24px #0003; border:1.5px solid #254a9a;
+      font-size:1.08em; padding:10px 0; transition:all .18s; text-align:left;
+    }
+    .add-menu button {
+      background:transparent; border:none; width:100%; padding:11px 18px;
+      font-size:1em; text-align:left; cursor:pointer;
+      transition:background .13s;
+      color:#254a9a; font-weight:500;
+    }
+    .add-menu button:hover { background:#F4FAFD;}
+    .modal {
+      position:fixed; z-index:100; top:0; left:0; width:100vw; height:100vh; background:#0006;
+      display:flex; justify-content:center; align-items:center;
+    }
+    .modal-content {
+      background:#fff; color:#222; border-radius:12px; padding:28px 26px; min-width:340px; max-width:90vw;
+      box-shadow:0 4px 44px #0008;
+    }
+    .node {
+      min-width:140px; background:#4DB1B3; border-radius:10px;
+      padding:10px; color:#fff; cursor:grab; border:2.5px solid #254a9a;
+      box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:2;
+      transition: box-shadow 0.1s, border 0.1s, filter 0.13s;
+      touch-action:none; position:relative; user-select: none;
+    }
+    .node.selected {
+      border:3.5px solid #E83430;
+      box-shadow:0 0 0 4px #E8343050, 0 4px 24px #0002;
+      z-index:3;
+    }
+    .node.glow {
+      border-color: #fffcad !important;
+      box-shadow: 0 0 0 7px #fffbb98a, 0 0 0 14px #ffeca660;
+      filter: drop-shadow(0 0 12px #fffbb9);
+      transition: box-shadow 0.1s, border-color 0.1s, filter 0.1s;
+    }
+    .node-title { font-size:1.08em; font-weight:600; margin-bottom:6px; letter-spacing:.01em; cursor:pointer; }
+    .node-title-input {
+      font-size:1.08em; font-weight:600; margin-bottom:6px;
+      border-radius:5px; border:none; padding:3px 8px;
+      width:90%; outline:2px solid #E8343050;
+    }
+    .io-row { display:flex; align-items:center; margin:2px 0; position:relative; height:22px;}
+    .io-dot { width:15px; height:15px; border-radius:50%; margin:0; cursor:pointer;
+      position:absolute; top:2px; z-index:4; transition:opacity 0.15s;}
+    .io-dot.input { background:#E83430; border:2.5px solid #fff; left:-15px;}
+    .io-dot.output { background:#C5284C; border:2.5px solid #fff; right:-15px;}
+    .io-dot:active, .io-dot:focus { box-shadow:0 0 0 4px #E8343040;}
+    .io-dot.unconnected { opacity:0.45;}
+    .message-dot {
+      filter:drop-shadow(0 0 10px #fffcc2) drop-shadow(0 0 25px #fd7) drop-shadow(0 0 6px #fffcc2);
+      stroke:#fffcad; stroke-width:2.2;
+      animation: msgPulse 1.0s infinite alternate;
+    }
+    @keyframes msgPulse {
+      0% { filter:drop-shadow(0 0 5px #fffcc2) drop-shadow(0 0 11px #fd7) drop-shadow(0 0 3px #fffcc2);}
+      100% { filter:drop-shadow(0 0 18px #fffcc2) drop-shadow(0 0 28px #fd7) drop-shadow(0 0 10px #fffcc2);}
+    }
+    .source-btn {
+      background: linear-gradient(90deg, #fffcad 60%, #ffebb0 100%);
+      color:#C5284C; border-radius:20px; padding:3px 18px; border:none; cursor:pointer;
+      font-size:1em; font-weight:600; margin:8px 0 0 0;
+      box-shadow:0 1px 8px #fffbb962,0 0px 3px #0001;
+      outline:2.5px solid #E83430a0; transition: box-shadow 0.12s;
+    }
+    .source-btn:hover { background:#fffbb9; color:#254a9a; box-shadow:0 2px 18px #fffbc99c;}
+    .logo {position:fixed; left:24px; bottom:24px; z-index:30; opacity:.90;}
+    .logo svg { height:40px;}
+    @media (max-width:700px) {
+      .toolbar {right:10px;bottom:10px;}
+      .logo {left:10px;bottom:10px;}
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+
+const {useState, useRef, useEffect} = React;
+const SG_COLORS = {
+  blue: "#0195D6",
+  blue2: "#254a9a",
+  red: "#E83430",
+  raspberry: "#C5284C",
+  green: "#4DB1B3",
+  orange: "#E66407"
+};
+
+let globalNodeId = 3;
+
+// --- Helpers ---
+function useNodeRefs(nodes) {
+  const refs = useRef({});
+  useEffect(() => {
+    nodes.forEach(n => { if (!refs.current[n.id]) refs.current[n.id] = React.createRef(); });
+    Object.keys(refs.current).forEach(id => {
+      if (!nodes.find(n=>String(n.id)===id)) delete refs.current[id];
+    });
+  }, [nodes]);
+  return refs.current;
+}
+function createNode(x, y, numInputs, numOutputs, type="normal") {
+  return {
+    id: globalNodeId++,
+    x, y,
+    title: type==="source" ? "Source" : "Node " + (globalNodeId - 1),
+    type,
+    inputs: type==="source" ? [] : Array.from({length: numInputs}, (_,i)=>({ id: `i${i}`, label:`In${i+1}` })),
+    outputs: Array.from({length: type==="source"?1:numOutputs}, (_,i)=>({ id: `o${i}`, label:type==="source"?"Emit":`Out${i+1}` }))
+  };
+}
+
+function App() {
+  const [nodes, setNodes] = useState([
+    createNode(120, 120, 2, 1),
+    createNode(350, 260, 1, 2),
+    createNode(90, 360, 0, 1, "source")
+  ]);
+  const [wires, setWires] = useState([]);
+  const [drag, setDrag] = useState(null);
+  const [connect, setConnect] = useState(null);
+  const [addPanel, setAddPanel] = useState({visible:false, x:60, y:60});
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [addType, setAddType] = useState("normal");
+  const [newInputs, setNewInputs] = useState(1);
+  const [newOutputs, setNewOutputs] = useState(1);
+  const [selected, setSelected] = useState(null);
+  const [showModal, setShowModal] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({x:0, y:0});
+  const [panning, setPanning] = useState(null);
+  const [isTouchZoom, setIsTouchZoom] = useState(false);
+  const [editTitleId, setEditTitleId] = useState(null);
+  const [editTitleValue, setEditTitleValue] = useState("");
+  const [renderTick, setRenderTick] = useState(0);
+  const [messages, setMessages] = useState([]); // Animated messages
+  const [glowNodes, setGlowNodes] = useState({}); // id: until timestamp
+
+  const svgRef = useRef();
+  const nodeRefs = useNodeRefs(nodes);
+
+  // ----------- PAN LOGIC -----------
+  function onBgMouseDown(e) {
+    if (!e.target.closest('.node')) {
+      setPanning({lastX:e.clientX, lastY:e.clientY});
+      setSelected(null);
+    }
+  }
+  function onMove(e) {
+    if (drag) {
+      const {id, dx, dy} = drag;
+      const nx = (e.clientX - pan.x) / zoom - dx;
+      const ny = (e.clientY - pan.y) / zoom - dy;
+      setNodes(nodes=>nodes.map(n=>n.id===id?{...n, x:nx, y:ny}:n));
+      setRenderTick(t=>t+1);
+    }
+    if (panning && !isTouchZoom) {
+      setPan({
+        x: pan.x + (e.clientX - panning.lastX),
+        y: pan.y + (e.clientY - panning.lastY)
+      });
+      setPanning({...panning, lastX:e.clientX, lastY:e.clientY});
+      setRenderTick(t=>t+1);
+    }
+    if (connect) {
+      const pt = clientToSvg(e.clientX, e.clientY);
+      setConnect(c=>({...c, toPos:pt}));
+    }
+  }
+  function onUp() {
+    setDrag(null);
+    setPanning(null);
+    setIsTouchZoom(false);
+  }
+  useEffect(()=>{
+    function onMoveDoc(e) { onMove(e); }
+    function onUpDoc(e) { onUp(e); }
+    if (drag || connect || panning) {
+      document.addEventListener('mousemove', onMoveDoc);
+      document.addEventListener('mouseup', onUpDoc);
+    }
+    return ()=>{
+      document.removeEventListener('mousemove', onMoveDoc);
+      document.removeEventListener('mouseup', onUpDoc);
+    }
+  }, [drag, connect, panning]);
+  // --- Force update wires after pan/zoom
+  useEffect(()=>{ setRenderTick(t=>t+1); }, [zoom, pan]);
+  // --- Touch zoom/pan
+  const lastDist = useRef(null);
+  function onTouchStart(e) {
+    if (e.touches.length===2) {
+      setIsTouchZoom(true);
+      lastDist.current = Math.sqrt(
+        Math.pow(e.touches[0].clientX-e.touches[1].clientX,2)+
+        Math.pow(e.touches[0].clientY-e.touches[1].clientY,2));
+    } else if (e.touches.length===1 && !connect && !drag) {
+      setPanning({lastX:e.touches[0].clientX, lastY:e.touches[0].clientY});
+    }
+  }
+  function onTouchMove(e) {
+    if (e.touches.length===2 && isTouchZoom) {
+      const d = Math.sqrt(
+        Math.pow(e.touches[0].clientX-e.touches[1].clientX,2)+
+        Math.pow(e.touches[0].clientY-e.touches[1].clientY,2));
+      let dz = d/lastDist.current;
+      if (dz && dz !== 1) {
+        let newZoom = Math.max(0.25, Math.min(2.5, zoom * dz));
+        setZoom(newZoom);
+        lastDist.current = d;
+      }
+    } else if (e.touches.length===1 && panning) {
+      setPan({
+        x: pan.x + (e.touches[0].clientX - panning.lastX),
+        y: pan.y + (e.touches[0].clientY - panning.lastY)
+      });
+      setPanning({...panning, lastX:e.touches[0].clientX, lastY:e.touches[0].clientY});
+      setRenderTick(t=>t+1);
+    }
+  }
+  function onTouchEnd(e) {
+    setIsTouchZoom(false);
+    setPanning(null);
+    lastDist.current = null;
+  }
+  useEffect(()=>{
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener('touchstart', onTouchStart, {passive:false});
+    svg.addEventListener('touchmove', onTouchMove, {passive:false});
+    svg.addEventListener('touchend', onTouchEnd, {passive:false});
+    return ()=>{
+      svg.removeEventListener('touchstart', onTouchStart);
+      svg.removeEventListener('touchmove', onTouchMove);
+      svg.removeEventListener('touchend', onTouchEnd);
+    }
+  }, [zoom, pan, isTouchZoom, panning]);
+  function onWheel(e) {
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 1) return;
+    e.preventDefault();
+    const pt = clientToSvg(e.clientX, e.clientY);
+    const scale = e.deltaY < 0 ? 1.1 : 0.91;
+    let newZoom = Math.max(0.25, Math.min(2.5, zoom * scale));
+    setPan({
+      x: e.clientX - pt.x * newZoom,
+      y: e.clientY - pt.y * newZoom
+    });
+    setZoom(newZoom);
+  }
+  function clientToSvg(clientX, clientY) {
+    const svg = svgRef.current;
+    if (!svg) return {x:0, y:0};
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - pan.x) / zoom,
+      y: (clientY - rect.top - pan.y) / zoom
+    }
+  }
+
+  // ------------- WIRE/CONNECTION LOGIC -------------
+  function startDragNode(nodeId, e) {
+    setSelected({type:'node', id:nodeId});
+    const node = nodes.find(n=>n.id===nodeId);
+    setDrag({
+      id: nodeId,
+      dx: (e.clientX - pan.x) / zoom - node.x,
+      dy: (e.clientY - pan.y) / zoom - node.y
+    });
+  }
+  function startConnect(nodeId, outputIdx, e) {
+    e.stopPropagation();
+    // Get position of output dot
+    const nodeEl = nodeRefs[nodeId]?.current;
+    const ioDots = nodeEl?.querySelectorAll('.io-dot.output');
+    let outPos = {x:0, y:0};
+    if (ioDots && ioDots[outputIdx]) {
+      const dotRect = ioDots[outputIdx].getBoundingClientRect();
+      const svgRect = svgRef.current.getBoundingClientRect();
+      outPos = {
+        x: (dotRect.left + 7.5 - svgRect.left - pan.x) / zoom,
+        y: (dotRect.top + 7.5 - svgRect.top - pan.y) / zoom
+      }
+    } else {
+      const node = nodes.find(n=>n.id===nodeId);
+      outPos = {x: node.x+120, y: node.y+40};
+    }
+    setConnect({
+      from: { nodeId, outputIdx },
+      fromPos: outPos,
+      toPos: outPos
+    });
+    setSelected(null);
+  }
+  function finishConnect(nodeId, inputIdx, e) {
+    if (connect && connect.from.nodeId !== nodeId) {
+      if (!wires.some(w=>w.to.nodeId===nodeId && w.to.inputIdx===inputIdx)) {
+        setWires(ws=>[...ws, { from: connect.from, to: { nodeId, inputIdx } }]);
+      }
+    }
+    setConnect(null);
+  }
+  function cancelConnect() { setConnect(null); }
+  function onAddNodeMenu(type) {
+    setShowAddMenu(false);
+    setAddType(type);
+    setAddPanel({ visible:true, x: window.innerWidth - 90, y: window.innerHeight - 140 });
+    setNewInputs(1); setNewOutputs(1);
+  }
+  function confirmAddNode() {
+    const cx = (window.innerWidth/2 - pan.x)/zoom;
+    const cy = (window.innerHeight/2 - pan.y)/zoom;
+    setNodes([...nodes, createNode(cx, cy, newInputs, newOutputs, addType)]);
+    setAddPanel({ ...addPanel, visible:false });
+    setRenderTick(t=>t+1);
+  }
+  function removeNode(nodeId) {
+    setNodes(ns=>ns.filter(n=>n.id!==nodeId));
+    setWires(ws=>ws.filter(w=>w.from.nodeId!==nodeId && w.to.nodeId!==nodeId));
+    setSelected(null);
+    setRenderTick(t=>t+1);
+  }
+  function removeWire(idx) {
+    setWires(ws=>ws.filter((_,i)=>i!==idx));
+    setSelected(null);
+    setRenderTick(t=>t+1);
+  }
+  function selectNode(nodeId) { setSelected({type:'node', id:nodeId}); }
+  function selectWire(idx) { setSelected({type:'wire', id:idx}); }
+
+  // --- Node title rename logic ---
+  function startRenameTitle(nodeId, currentTitle) {
+    setEditTitleId(nodeId);
+    setEditTitleValue(currentTitle);
+  }
+  function commitRenameTitle() {
+    setNodes(nodes => nodes.map(n => n.id === editTitleId ? {...n, title: editTitleValue} : n));
+    setEditTitleId(null);
+    setEditTitleValue("");
+  }
+  function onTitleInputKey(e) {
+    if (e.key === "Enter") commitRenameTitle();
+    if (e.key === "Escape") { setEditTitleId(null); setEditTitleValue(""); }
+  }
+
+  // --- Add node/message glowing logic ---
+  function flashGlowNode(nodeId) {
+    setGlowNodes(old => ({...old, [nodeId]: performance.now()+400}));
+  }
+  // Remove expired glow effects
+  useEffect(()=>{
+    if (!Object.keys(glowNodes).length) return;
+    const timer = setInterval(()=>{
+      setGlowNodes(old => {
+        const now = performance.now();
+        const filtered = {};
+        Object.keys(old).forEach(id => {
+          if (old[id] > now) filtered[id] = old[id];
+        });
+        if (Object.keys(filtered).length!==Object.keys(old).length) return filtered;
+        return old;
+      });
+    }, 60);
+    return ()=>clearInterval(timer);
+  }, [glowNodes]);
+
+  // ------------- MESSAGE ANIMATION LOGIC -------------
+  // "messages": array of {id, route: [{fromNodeId, fromOutputIdx, wireIdx, toNodeId, toInputIdx}], progress, split}
+  // progress: 0-1 (0 = start of wire, 1 = end of wire)
+  function emitMessageFrom(nodeId, outputIdx) {
+    // Find all wires from this output
+    const wiresOut = wires.map((w,i)=>({...w, idx:i})).filter(w=>w.from.nodeId===nodeId && w.from.outputIdx===outputIdx);
+    wiresOut.forEach(w => {
+      setMessages(msgs => [
+        ...msgs,
+        {
+          id: Math.random().toString(36).slice(2),
+          route: [{ fromNodeId: nodeId, fromOutputIdx: outputIdx, wireIdx: w.idx, toNodeId: w.to.nodeId, toInputIdx: w.to.inputIdx }],
+          progress: 0,
+          split: false
+        }
+      ]);
+    });
+    // Also glow the node immediately
+    flashGlowNode(nodeId);
+  }
+  // Animation loop for messages
+  useEffect(()=>{
+    if (!messages.length) return;
+    let frame;
+    function step(ts) {
+      setMessages(msgs => {
+        let newMsgs = [];
+        let toGlow = {};
+        msgs.forEach(msg => {
+          // Each message traverses along its current wire
+          let { route, progress } = msg;
+          let wireIdx = route[route.length-1].wireIdx;
+          let wire = wires[wireIdx];
+          if (!wire) return;
+          // Calculate distance of wire (approximate as Bezier length, but just use screen diagonal for speed for now)
+          const fromNode = nodes.find(n=>n.id===wire.from.nodeId);
+          const toNode = nodes.find(n=>n.id===wire.to.nodeId);
+          if (!fromNode || !toNode) return;
+          const p1 = getIODotPos(fromNode, 'output', wire.from.outputIdx);
+          const p2 = getIODotPos(toNode, 'input', wire.to.inputIdx);
+          const dx = (p2.x - p1.x)*zoom, dy = (p2.y - p1.y)*zoom;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const screenWidth = window.innerWidth;
+          const speed = screenWidth; // px/sec
+          const stepAmt = Math.max(0.01, 16 / 1000 * speed / dist); // per 16ms frame
+
+          let newProgress = Math.min(1, progress + stepAmt);
+          // Glow node border for a moment while message is passing
+          if (newProgress > 0.1 && newProgress < 0.98) toGlow[route[route.length-1].toNodeId]=true;
+          if (newProgress < 1) {
+            newMsgs.push({...msg, progress: newProgress});
+          } else {
+            // Arrived at node, glow node
+            flashGlowNode(route[route.length-1].toNodeId);
+            // At toNode, fan out on all outputs if any
+            const nextNode = nodes.find(n=>n.id===route[route.length-1].toNodeId);
+            if (!nextNode) return;
+            let outgoing = wires.map((w,i)=>({...w, idx:i}))
+              .filter(w=>w.from.nodeId===nextNode.id);
+            if (outgoing.length>0) {
+              outgoing.forEach(outw=>{
+                newMsgs.push({
+                  id: Math.random().toString(36).slice(2),
+                  route: [...route, { fromNodeId:outw.from.nodeId, fromOutputIdx:outw.from.outputIdx, wireIdx:outw.idx, toNodeId:outw.to.nodeId, toInputIdx:outw.to.inputIdx }],
+                  progress: 0,
+                  split: true
+                });
+              });
+            }
+          }
+        });
+        return newMsgs;
+      });
+      frame = requestAnimationFrame(step);
+    }
+    frame = requestAnimationFrame(step);
+    return ()=>cancelAnimationFrame(frame);
+  }, [messages, wires, nodes, zoom]);
+
+  // --- Export/Import ---
+  function exportJSON() {
+    const cfg = { nodes, wires };
+    setShowModal({type:'export', content: JSON.stringify(cfg, null, 2)});
+  }
+  function importJSON(txt) {
+    try {
+      const obj = JSON.parse(txt);
+      if(obj.nodes && obj.wires) {
+        let maxId = Math.max(0, ...obj.nodes.map(n=>n.id));
+        globalNodeId = maxId+1;
+        setNodes(obj.nodes);
+        setWires(obj.wires);
+        setTimeout(()=>setNodes(n=>[...n]), 1);
+        setShowModal(null);
+        setRenderTick(t=>t+1);
+      } else throw new Error();
+    } catch {
+      alert("Invalid config JSON!");
+    }
+  }
+  function trashClick() {
+    if (selected) {
+      if (selected.type==='node') removeNode(selected.id);
+      else if (selected.type==='wire') removeWire(selected.id);
+    }
+  }
+  // --- Key Handlers ---
+  useEffect(()=>{
+    function onKeyDown(e) {
+      if (e.key==='Escape' && connect) cancelConnect();
+      if ((e.key==='Delete' || e.key==='Backspace') && selected) {
+        if (selected.type==='node') removeNode(selected.id);
+        if (selected.type==='wire') removeWire(selected.id);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return ()=>window.removeEventListener('keydown', onKeyDown);
+  }, [connect, selected, nodes, wires]);
+
+  // --- Get io dot positions ---
+  function getIODotPos(node, type, idx) {
+    const nodeEl = nodeRefs[node.id]?.current;
+    const ioDots = nodeEl?.querySelectorAll('.io-dot.'+type);
+    if (ioDots && ioDots[idx]) {
+      const dotRect = ioDots[idx].getBoundingClientRect();
+      const svgRect = svgRef.current.getBoundingClientRect();
+      return {
+        x: (dotRect.left + 7.5 - svgRect.left - pan.x) / zoom,
+        y: (dotRect.top + 7.5 - svgRect.top - pan.y) / zoom
+      }
+    }
+    // fallback
+    return {x: node.x + (type==="input"?0:120), y: node.y + 40 + 24*idx};
+  }
+  // --- Render wires ---
+  function renderWires() {
+    renderTick;
+    return wires.map((w, i) => {
+      const fromNode = nodes.find(n=>n.id===w.from.nodeId);
+      const toNode = nodes.find(n=>n.id===w.to.nodeId);
+      if (!fromNode||!toNode) return null;
+      const p1 = getIODotPos(fromNode, 'output', w.from.outputIdx);
+      const p2 = getIODotPos(toNode, 'input', w.to.inputIdx);
+      const dx = Math.abs(p2.x - p1.x) * 0.6 + 30;
+      return (
+        <g key={i}
+           className={"wire"+(selected && selected.type==='wire' && selected.id===i ? " selected":"")}
+           onMouseDown={e=>{ e.stopPropagation(); selectWire(i); }}
+           style={{pointerEvents:'all'}}>
+          <path
+            d={`
+              M${p1.x},${p1.y}
+              C${p1.x+dx},${p1.y}
+               ${p2.x-dx},${p2.y}
+               ${p2.x},${p2.y}
+            `}
+            stroke={selected && selected.type==='wire' && selected.id===i ? SG_COLORS.red : SG_COLORS.raspberry}
+            strokeWidth="4"
+            fill="none"
+            opacity={selected && selected.type==='wire' && selected.id===i ? "1":"0.88"}
+            style={selected && selected.type==='wire' && selected.id===i ? {filter:'drop-shadow(0 0 10px #E83430B0)'} : {}}
+          />
+          <circle cx={p1.x} cy={p1.y} r="6" fill={SG_COLORS.raspberry} />
+          <circle cx={p2.x} cy={p2.y} r="6" fill={SG_COLORS.red} />
+        </g>
+      );
+    });
+  }
+  // --- Render moving message dots ---
+  function renderMessages() {
+    renderTick;
+    let out = [];
+    messages.forEach((msg, j) => {
+      const last = msg.route[msg.route.length-1];
+      const wire = wires[last.wireIdx];
+      if (!wire) return;
+      const fromNode = nodes.find(n=>n.id===wire.from.nodeId);
+      const toNode = nodes.find(n=>n.id===wire.to.nodeId);
+      if (!fromNode||!toNode) return;
+      const p1 = getIODotPos(fromNode, 'output', wire.from.outputIdx);
+      const p2 = getIODotPos(toNode, 'input', wire.to.inputIdx);
+      // Bezier
+      const dx = Math.abs(p2.x - p1.x) * 0.6 + 30;
+      const cp1 = {x: p1.x+dx, y:p1.y};
+      const cp2 = {x: p2.x-dx, y:p2.y};
+      // Calculate point along curve
+      function bezier(t,a,b,c,d){
+        return (
+          a*(1-t)*(1-t)*(1-t)+
+          3*b*(1-t)*(1-t)*t+
+          3*c*(1-t)*t*t+
+          d*t*t*t
+        );
+      }
+      const t = Math.max(0, Math.min(1, msg.progress));
+      const x = bezier(t,p1.x,cp1.x,cp2.x,p2.x);
+      const y = bezier(t,p1.y,cp1.y,cp2.y,p2.y);
+      out.push(
+        <circle key={msg.id+"dot"} cx={x} cy={y} r={12} fill="#fffbb9"
+          className="message-dot"
+          />
+      );
+    });
+    return out;
+  }
+  // --- Render ghost wire ---
+  function renderGhostWire() {
+    renderTick;
+    if (!connect) return null;
+    let p1 = connect.fromPos;
+    let p2 = connect.toPos || connect.fromPos;
+    const dx = Math.abs(p2.x - p1.x) * 0.6 + 30;
+    return (
+      <path
+        d={`
+          M${p1.x},${p1.y}
+          C${p1.x+dx},${p1.y}
+           ${p2.x-dx},${p2.y}
+           ${p2.x},${p2.y}
+        `}
+        stroke={SG_COLORS.blue2}
+        strokeWidth="3"
+        fill="none"
+        opacity="0.76"
+        style={{strokeDasharray:"7 4", filter:'drop-shadow(0 0 5px #254a9a88)'}}
+      />
+    );
+  }
+
+  // --- UI ---
+  return (
+    <div style={{width:"100vw",height:"100vh",overflow:"hidden"}}>
+      <svg
+        ref={svgRef}
+        style={{
+          position: "absolute", left: 0, top: 0, width: "100vw", height: "100vh", display: "block", zIndex:1
+        }}
+        width="100vw"
+        height="100vh"
+        onMouseDown={onBgMouseDown}
+        onWheel={onWheel}
+      >
+        <g
+          style={{
+            transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
+            transformOrigin: "0 0"
+          }}
+        >
+          {/* Endless grid pattern */}
+          <defs>
+            <pattern id="crossgrid" width="32" height="32" patternUnits="userSpaceOnUse">
+              <g opacity="0.14" stroke="#254a9a" strokeWidth="1">
+                <line x1="16" y1="10" x2="16" y2="22"/>
+                <line x1="10" y1="16" x2="22" y2="16"/>
+              </g>
+            </pattern>
+          </defs>
+          <rect x="-25000" y="-25000" width="50000" height="50000" fill="url(#crossgrid)" />
+          {/* Wires */}
+          {renderWires()}
+          {/* Animated messages */}
+          {renderMessages()}
+          {/* Ghost wire */}
+          {renderGhostWire()}
+          {/* Nodes as foreignObjects */}
+          {nodes.map((node) => (
+            <foreignObject
+              key={node.id}
+              x={node.x} y={node.y} width={140} height={60 + 30 * Math.max(node.inputs.length, node.outputs.length)}
+              style={{overflow: "visible"}}
+            >
+              <div
+                ref={nodeRefs[node.id]}
+                className={
+                  "node"
+                  +(selected && selected.type==='node' && selected.id===node.id ? " selected" : "")
+                  +(glowNodes[node.id] ? " glow" : "")
+                  +(node.type==="source"?" source":"")
+                }
+                style={{
+                  left:0, top:0, width:140, position:"absolute",
+                  zIndex: (selected && selected.type==='node' && selected.id===node.id) ? 10: 2
+                }}
+                onMouseDown={e=>{ e.stopPropagation(); startDragNode(node.id, e); }}
+                tabIndex={0}
+                onClick={e=>{e.stopPropagation(); selectNode(node.id);}}
+              >
+                {/* Editable node title */}
+                {editTitleId===node.id ?
+                  <input
+                    autoFocus
+                    className="node-title-input"
+                    value={editTitleValue}
+                    onBlur={commitRenameTitle}
+                    onChange={e=>setEditTitleValue(e.target.value)}
+                    onKeyDown={onTitleInputKey}
+                  />
+                  :
+                  <div className="node-title" title="Click to rename"
+                       onClick={e=>{e.stopPropagation(); startRenameTitle(node.id, node.title);}}>
+                    {node.title}
+                  </div>
+                }
+                <div>
+                  {node.inputs.map((inp,i) => {
+                    const isUnconnected = !wires.some(w => w.to.nodeId === node.id && w.to.inputIdx === i);
+                    return (
+                      <div className="io-row input" key={inp.id}>
+                        <div
+                          className={"io-dot input" + (isUnconnected ? " unconnected" : "")}
+                          title="Input"
+                          onMouseUp={e=>{
+                            if (connect) finishConnect(node.id, i, e);
+                          }}
+                          style={{
+                            opacity: isUnconnected ? 0.45 : 1,
+                            // pointerEvents: 'auto', // always clickable
+                          }}
+                        ></div>
+                        <span style={{marginLeft:14, fontSize:'.97em', opacity:0.89}}>{inp.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div>
+                  {node.outputs.map((out,i) => {
+                    const isUnconnected = !wires.some(w => w.from.nodeId === node.id && w.from.outputIdx === i);
+                    return (
+                      <div className="io-row output" key={out.id}>
+                        <span style={{marginRight:14, fontSize:'.97em', opacity:0.89}}>{out.label}</span>
+                        <div
+                          className={"io-dot output" + (isUnconnected ? " unconnected" : "")}
+                          title="Output"
+                          onMouseDown={e=>startConnect(node.id, i, e)}
+                          style={{
+                            opacity: isUnconnected ? 0.45 : 1,
+                            // pointerEvents: 'auto', // always clickable
+                          }}
+                        ></div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Source node emit button */}
+                {node.type==="source" && (
+                  <button className="source-btn"
+                    onClick={e=>{ emitMessageFrom(node.id, 0); e.stopPropagation(); }}>
+                    Emit
+                  </button>
+                )}
+              </div>
+            </foreignObject>
+          ))}
+        </g>
+      </svg>
+      {/* Toolbar and overlays */}
+      <div className="toolbar">
+        <div style={{position:"relative"}}>
+          <button className="toolbar-btn" title="Add Node/Source"
+            onClick={()=>setShowAddMenu(m=>!m)}
+            style={{zIndex:70}}
+          >
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#fffbb9" stroke="#E83430" strokeWidth="1.8"/><path d="M12 7v10m-5-5h10" stroke="#E83430" strokeWidth="2.1" fill="none" strokeLinecap="round"/></svg>
+            <span className="tooltip">Add Node/Source</span>
+          </button>
+          {showAddMenu && (
+            <div className="add-menu" onMouseLeave={()=>setShowAddMenu(false)}>
+              <button onClick={()=>onAddNodeMenu("normal")}>Add Node</button>
+              <button onClick={()=>onAddNodeMenu("source")}>Add Source</button>
+            </div>
+          )}
+        </div>
+        <button
+          className={"toolbar-btn" + (selected ? " selected" : "")}
+          title="Delete selected node or wire"
+          disabled={!selected}
+          onClick={trashClick}
+        >
+          <svg viewBox="0 0 24 24"><path d="M9 3V4H4V6H20V4H15V3H9ZM6 8V20C6 21.1 6.9 22 8 22H16C17.1 22 18 21.1 18 20V8H6ZM8 10H10V18H8V10ZM14 10H16V18H14V10Z"/></svg>
+          <span className="tooltip">{selected && selected.type==='node' ? "Delete node & wires":"Delete wire"}</span>
+        </button>
+        <button className="toolbar-btn" title="Export" onClick={exportJSON}>
+          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" stroke="#254a9a" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+          <span className="tooltip">Export</span>
+        </button>
+        <button className="toolbar-btn" title="Import" onClick={()=>setShowModal({type:'import', content:""})}>
+          <svg viewBox="0 0 24 24"><path d="M12 21V9m0 0l4 4m-4-4l-4 4M4 5h16" stroke="#254a9a" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+          <span className="tooltip">Import</span>
+        </button>
+      </div>
+      <div className="logo">
+        <svg viewBox="0 0 500 90">
+          <image href="https://upload.wikimedia.org/wikipedia/fr/d/dc/Saint-Gobain_logo.svg" height="90"/>
+        </svg>
+      </div>
+      {showModal && (
+        <div className="modal" onClick={()=>setShowModal(null)}>
+          <div className="modal-content" onClick={e=>e.stopPropagation()}>
+            {showModal.type==="export" && <>
+              <h3 style={{marginTop:0}}>Exported Config</h3>
+              <textarea style={{width:"100%", height:120, fontSize:"1em"}} readOnly value={showModal.content}></textarea>
+              <div style={{textAlign:"right",marginTop:16}}>
+                <button className="btn" onClick={()=>setShowModal(null)}>Close</button>
+              </div>
+            </>}
+            {showModal.type==="import" && <>
+              <h3 style={{marginTop:0}}>Import Config</h3>
+              <textarea style={{width:"100%", height:120, fontSize:"1em"}} placeholder="Paste config JSON here"
+                value={showModal.content} onChange={e=>setShowModal(m=>({...m, content:e.target.value}))}></textarea>
+              <div style={{textAlign:"right",marginTop:16}}>
+                <button className="btn" onClick={()=>importJSON(showModal.content)}>Import</button>
+                <button className="btn" style={{marginLeft:10}} onClick={()=>setShowModal(null)}>Cancel</button>
+              </div>
+            </>}
+          </div>
+        </div>
+      )}
+      {addPanel.visible && (
+        <div className="modal" onClick={()=>setAddPanel(a=>({...a,visible:false}))}>
+          <div className="modal-content" onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:600,marginBottom:8, fontSize:"1.07em"}}>Add {addType==="source"?"Source":"Node"}</div>
+            {addType==="normal" &&
+              <div>
+                Inputs: <input type="number" min={0} max={6} style={{width:40}} value={newInputs} onChange={e=>setNewInputs(Math.max(0,Math.min(6,parseInt(e.target.value)||0)))} />
+                &nbsp; Outputs: <input type="number" min={0} max={6} style={{width:40}} value={newOutputs} onChange={e=>setNewOutputs(Math.max(0,Math.min(6,parseInt(e.target.value)||0)))} />
+              </div>
+            }
+            <button className="btn" style={{marginTop:16}} onClick={confirmAddNode}>Create</button>
+            <button className="btn" style={{marginTop:16,marginLeft:10,background:'#254a9a'}} onClick={()=>setAddPanel(a=>({...a,visible:false}))}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
