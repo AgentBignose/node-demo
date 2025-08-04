@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Saint-Gobain Node Editor - Animated Messaging</title>
+  <title>Saint-Gobain Node Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     html, body { height:100%; margin:0; background:#0195D6; font-family:sans-serif; overflow:hidden;}
@@ -114,6 +114,7 @@
     @media (max-width:700px) {
       .toolbar {right:10px;bottom:10px;}
       .logo {left:10px;bottom:10px;}
+      .modal-content { min-width:96vw !important;}
     }
   </style>
 </head>
@@ -124,7 +125,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script type="text/babel">
 
-const {useState, useRef, useEffect} = React;
+const STORAGE_KEY = "saintgobain_node_editor_config";
 const SG_COLORS = {
   blue: "#0195D6",
   blue2: "#254a9a",
@@ -133,13 +134,12 @@ const SG_COLORS = {
   green: "#4DB1B3",
   orange: "#E66407"
 };
-
 let globalNodeId = 3;
 
 // --- Helpers ---
 function useNodeRefs(nodes) {
-  const refs = useRef({});
-  useEffect(() => {
+  const refs = React.useRef({});
+  React.useEffect(() => {
     nodes.forEach(n => { if (!refs.current[n.id]) refs.current[n.id] = React.createRef(); });
     Object.keys(refs.current).forEach(id => {
       if (!nodes.find(n=>String(n.id)===id)) delete refs.current[id];
@@ -159,33 +159,58 @@ function createNode(x, y, numInputs, numOutputs, type="normal") {
 }
 
 function App() {
-  const [nodes, setNodes] = useState([
-    createNode(120, 120, 2, 1),
-    createNode(350, 260, 1, 2),
-    createNode(90, 360, 0, 1, "source")
-  ]);
-  const [wires, setWires] = useState([]);
-  const [drag, setDrag] = useState(null);
-  const [connect, setConnect] = useState(null);
-  const [addPanel, setAddPanel] = useState({visible:false, x:60, y:60});
-  const [showAddMenu, setShowAddMenu] = useState(false);
-  const [addType, setAddType] = useState("normal");
-  const [newInputs, setNewInputs] = useState(1);
-  const [newOutputs, setNewOutputs] = useState(1);
-  const [selected, setSelected] = useState(null);
-  const [showModal, setShowModal] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({x:0, y:0});
-  const [panning, setPanning] = useState(null);
-  const [isTouchZoom, setIsTouchZoom] = useState(false);
-  const [editTitleId, setEditTitleId] = useState(null);
-  const [editTitleValue, setEditTitleValue] = useState("");
-  const [renderTick, setRenderTick] = useState(0);
-  const [messages, setMessages] = useState([]); // Animated messages
-  const [glowNodes, setGlowNodes] = useState({}); // id: until timestamp
+  // ----- Persistence-aware initial load -----
+  let initialNodes = [createNode(120, 120, 2, 1), createNode(350, 260, 1, 2), createNode(90, 360, 0, 1, "source")];
+  let initialWires = [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed.nodes) && Array.isArray(parsed.wires)) {
+        initialNodes = parsed.nodes;
+        initialWires = parsed.wires;
+        let maxId = Math.max(0, ...parsed.nodes.map(n=>n.id));
+        globalNodeId = maxId+1;
+      }
+    }
+  } catch (e) {}
+  const [nodes, setNodes] = React.useState(initialNodes);
+  const [wires, setWires] = React.useState(initialWires);
 
-  const svgRef = useRef();
+  const [drag, setDrag] = React.useState(null);
+  const [connect, setConnect] = React.useState(null);
+  const [addPanel, setAddPanel] = React.useState({visible:false, nodeId:null, x:60, y:60});
+  const [addType, setAddType] = React.useState("normal");
+  const [newInputs, setNewInputs] = React.useState(1);
+  const [newOutputs, setNewOutputs] = React.useState(1);
+  const [showAddMenu, setShowAddMenu] = React.useState(false);
+  const [selected, setSelected] = React.useState(null);
+  const [showModal, setShowModal] = React.useState(null);
+  const [zoom, setZoom] = React.useState(1);
+  const [pan, setPan] = React.useState({x:0, y:0});
+  const [panning, setPanning] = React.useState(null);
+  const [isTouchZoom, setIsTouchZoom] = React.useState(false);
+  const [editTitleId, setEditTitleId] = React.useState(null);
+  const [editTitleValue, setEditTitleValue] = React.useState("");
+  const [renderTick, setRenderTick] = React.useState(0);
+  const [messages, setMessages] = React.useState([]);
+  const [glowNodes, setGlowNodes] = React.useState({});
+
+  const svgRef = React.useRef();
   const nodeRefs = useNodeRefs(nodes);
+
+  // Save to localStorage on any change
+  React.useEffect(() => {
+    const save = {nodes, wires};
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+    } catch (e) { /* ignore quota errors etc. */ }
+  }, [nodes, wires]);
+
+  // On first mount, tick after load to ensure wires align
+  React.useEffect(() => {
+    setTimeout(() => setRenderTick(t => t + 1), 10);
+  }, []);
 
   // ----------- PAN LOGIC -----------
   function onBgMouseDown(e) {
@@ -220,7 +245,7 @@ function App() {
     setPanning(null);
     setIsTouchZoom(false);
   }
-  useEffect(()=>{
+  React.useEffect(()=>{
     function onMoveDoc(e) { onMove(e); }
     function onUpDoc(e) { onUp(e); }
     if (drag || connect || panning) {
@@ -232,10 +257,9 @@ function App() {
       document.removeEventListener('mouseup', onUpDoc);
     }
   }, [drag, connect, panning]);
-  // --- Force update wires after pan/zoom
-  useEffect(()=>{ setRenderTick(t=>t+1); }, [zoom, pan]);
+  React.useEffect(()=>{ setRenderTick(t=>t+1); }, [zoom, pan]);
   // --- Touch zoom/pan
-  const lastDist = useRef(null);
+  const lastDist = React.useRef(null);
   function onTouchStart(e) {
     if (e.touches.length===2) {
       setIsTouchZoom(true);
@@ -271,7 +295,7 @@ function App() {
     setPanning(null);
     lastDist.current = null;
   }
-  useEffect(()=>{
+  React.useEffect(()=>{
     const svg = svgRef.current;
     if (!svg) return;
     svg.addEventListener('touchstart', onTouchStart, {passive:false});
@@ -341,9 +365,7 @@ function App() {
   }
   function finishConnect(nodeId, inputIdx, e) {
     if (connect && connect.from.nodeId !== nodeId) {
-      if (!wires.some(w=>w.to.nodeId===nodeId && w.to.inputIdx===inputIdx)) {
-        setWires(ws=>[...ws, { from: connect.from, to: { nodeId, inputIdx } }]);
-      }
+      setWires(ws=>[...ws, { from: connect.from, to: { nodeId, inputIdx } }]);
     }
     setConnect(null);
   }
@@ -351,15 +373,33 @@ function App() {
   function onAddNodeMenu(type) {
     setShowAddMenu(false);
     setAddType(type);
-    setAddPanel({ visible:true, x: window.innerWidth - 90, y: window.innerHeight - 140 });
-    setNewInputs(1); setNewOutputs(1);
+    setAddPanel({
+      visible: true,
+      nodeId: null,
+      x: window.innerWidth - 90,
+      y: window.innerHeight - 140,
+    });
+    setNewInputs(1);
+    setNewOutputs(1);
   }
-  function confirmAddNode() {
-    const cx = (window.innerWidth/2 - pan.x)/zoom;
-    const cy = (window.innerHeight/2 - pan.y)/zoom;
-    setNodes([...nodes, createNode(cx, cy, newInputs, newOutputs, addType)]);
-    setAddPanel({ ...addPanel, visible:false });
-    setRenderTick(t=>t+1);
+  function onEditNodeMenu(nodeId) {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    setAddType(node.type);
+    setAddPanel({
+      visible: true,
+      nodeId,
+      x: node.x + pan.x,
+      y: node.y + pan.y,
+    });
+    setNewInputs(node.inputs?.length || 0);
+    setNewOutputs(node.outputs?.length || 0);
+  }
+  function trashClick() {
+    if (selected) {
+      if (selected.type==='node') removeNode(selected.id);
+      else if (selected.type==='wire') removeWire(selected.id);
+    }
   }
   function removeNode(nodeId) {
     setNodes(ns=>ns.filter(n=>n.id!==nodeId));
@@ -395,7 +435,7 @@ function App() {
     setGlowNodes(old => ({...old, [nodeId]: performance.now()+400}));
   }
   // Remove expired glow effects
-  useEffect(()=>{
+  React.useEffect(()=>{
     if (!Object.keys(glowNodes).length) return;
     const timer = setInterval(()=>{
       setGlowNodes(old => {
@@ -412,10 +452,7 @@ function App() {
   }, [glowNodes]);
 
   // ------------- MESSAGE ANIMATION LOGIC -------------
-  // "messages": array of {id, route: [{fromNodeId, fromOutputIdx, wireIdx, toNodeId, toInputIdx}], progress, split}
-  // progress: 0-1 (0 = start of wire, 1 = end of wire)
   function emitMessageFrom(nodeId, outputIdx) {
-    // Find all wires from this output
     const wiresOut = wires.map((w,i)=>({...w, idx:i})).filter(w=>w.from.nodeId===nodeId && w.from.outputIdx===outputIdx);
     wiresOut.forEach(w => {
       setMessages(msgs => [
@@ -428,11 +465,9 @@ function App() {
         }
       ]);
     });
-    // Also glow the node immediately
     flashGlowNode(nodeId);
   }
-  // Animation loop for messages
-  useEffect(()=>{
+  React.useEffect(()=>{
     if (!messages.length) return;
     let frame;
     function step(ts) {
@@ -440,12 +475,10 @@ function App() {
         let newMsgs = [];
         let toGlow = {};
         msgs.forEach(msg => {
-          // Each message traverses along its current wire
           let { route, progress } = msg;
           let wireIdx = route[route.length-1].wireIdx;
           let wire = wires[wireIdx];
           if (!wire) return;
-          // Calculate distance of wire (approximate as Bezier length, but just use screen diagonal for speed for now)
           const fromNode = nodes.find(n=>n.id===wire.from.nodeId);
           const toNode = nodes.find(n=>n.id===wire.to.nodeId);
           if (!fromNode || !toNode) return;
@@ -458,14 +491,11 @@ function App() {
           const stepAmt = Math.max(0.01, 16 / 1000 * speed / dist); // per 16ms frame
 
           let newProgress = Math.min(1, progress + stepAmt);
-          // Glow node border for a moment while message is passing
           if (newProgress > 0.1 && newProgress < 0.98) toGlow[route[route.length-1].toNodeId]=true;
           if (newProgress < 1) {
             newMsgs.push({...msg, progress: newProgress});
           } else {
-            // Arrived at node, glow node
             flashGlowNode(route[route.length-1].toNodeId);
-            // At toNode, fan out on all outputs if any
             const nextNode = nodes.find(n=>n.id===route[route.length-1].toNodeId);
             if (!nextNode) return;
             let outgoing = wires.map((w,i)=>({...w, idx:i}))
@@ -495,6 +525,19 @@ function App() {
     const cfg = { nodes, wires };
     setShowModal({type:'export', content: JSON.stringify(cfg, null, 2)});
   }
+  function downloadJSON(jsonString, filename="nodes-export.json") {
+    const blob = new Blob([jsonString], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 200);
+  }
   function importJSON(txt) {
     try {
       const obj = JSON.parse(txt);
@@ -503,22 +546,16 @@ function App() {
         globalNodeId = maxId+1;
         setNodes(obj.nodes);
         setWires(obj.wires);
-        setTimeout(()=>setNodes(n=>[...n]), 1);
         setShowModal(null);
-        setRenderTick(t=>t+1);
+        setTimeout(() => setRenderTick(t => t + 1), 10);
       } else throw new Error();
     } catch {
       alert("Invalid config JSON!");
     }
   }
-  function trashClick() {
-    if (selected) {
-      if (selected.type==='node') removeNode(selected.id);
-      else if (selected.type==='wire') removeWire(selected.id);
-    }
-  }
+
   // --- Key Handlers ---
-  useEffect(()=>{
+  React.useEffect(()=>{
     function onKeyDown(e) {
       if (e.key==='Escape' && connect) cancelConnect();
       if ((e.key==='Delete' || e.key==='Backspace') && selected) {
@@ -542,10 +579,8 @@ function App() {
         y: (dotRect.top + 7.5 - svgRect.top - pan.y) / zoom
       }
     }
-    // fallback
     return {x: node.x + (type==="input"?0:120), y: node.y + 40 + 24*idx};
   }
-  // --- Render wires ---
   function renderWires() {
     renderTick;
     return wires.map((w, i) => {
@@ -579,7 +614,6 @@ function App() {
       );
     });
   }
-  // --- Render moving message dots ---
   function renderMessages() {
     renderTick;
     let out = [];
@@ -592,11 +626,9 @@ function App() {
       if (!fromNode||!toNode) return;
       const p1 = getIODotPos(fromNode, 'output', wire.from.outputIdx);
       const p2 = getIODotPos(toNode, 'input', wire.to.inputIdx);
-      // Bezier
       const dx = Math.abs(p2.x - p1.x) * 0.6 + 30;
       const cp1 = {x: p1.x+dx, y:p1.y};
       const cp2 = {x: p2.x-dx, y:p2.y};
-      // Calculate point along curve
       function bezier(t,a,b,c,d){
         return (
           a*(1-t)*(1-t)*(1-t)+
@@ -616,7 +648,6 @@ function App() {
     });
     return out;
   }
-  // --- Render ghost wire ---
   function renderGhostWire() {
     renderTick;
     if (!connect) return null;
@@ -697,6 +728,10 @@ function App() {
                 onMouseDown={e=>{ e.stopPropagation(); startDragNode(node.id, e); }}
                 tabIndex={0}
                 onClick={e=>{e.stopPropagation(); selectNode(node.id);}}
+                onDoubleClick={e => {
+                  e.stopPropagation();
+                  onEditNodeMenu(node.id);
+                }}
               >
                 {/* Editable node title */}
                 {editTitleId===node.id ?
@@ -725,10 +760,6 @@ function App() {
                           onMouseUp={e=>{
                             if (connect) finishConnect(node.id, i, e);
                           }}
-                          style={{
-                            opacity: isUnconnected ? 0.45 : 1,
-                            // pointerEvents: 'auto', // always clickable
-                          }}
                         ></div>
                         <span style={{marginLeft:14, fontSize:'.97em', opacity:0.89}}>{inp.label}</span>
                       </div>
@@ -745,10 +776,6 @@ function App() {
                           className={"io-dot output" + (isUnconnected ? " unconnected" : "")}
                           title="Output"
                           onMouseDown={e=>startConnect(node.id, i, e)}
-                          style={{
-                            opacity: isUnconnected ? 0.45 : 1,
-                            // pointerEvents: 'auto', // always clickable
-                          }}
                         ></div>
                       </div>
                     );
@@ -803,43 +830,233 @@ function App() {
       </div>
       <div className="logo">
         <svg viewBox="0 0 500 90">
-          <image href="https://upload.wikimedia.org/wikipedia/fr/d/dc/Saint-Gobain_logo.svg" height="90"/>
+          <image href="" height="90"/>
         </svg>
       </div>
       {showModal && (
         <div className="modal" onClick={()=>setShowModal(null)}>
           <div className="modal-content" onClick={e=>e.stopPropagation()}>
             {showModal.type==="export" && <>
-              <h3 style={{marginTop:0}}>Exported Config</h3>
-              <textarea style={{width:"100%", height:120, fontSize:"1em"}} readOnly value={showModal.content}></textarea>
-              <div style={{textAlign:"right",marginTop:16}}>
-                <button className="btn" onClick={()=>setShowModal(null)}>Close</button>
+              <h3 style={{marginTop:0, color:"#254a9a"}}>Exported Config</h3>
+              <textarea
+                style={{
+                  width:"100%", height:120, fontSize:"1em", background:"#F4FAFD",
+                  borderRadius:7, border:"1.3px solid #e3e8ee", color:"#333", marginBottom:14
+                }}
+                readOnly value={showModal.content}>
+              </textarea>
+              <div style={{textAlign:"right",marginTop:8, display:"flex", gap:10, justifyContent:"flex-end"}}>
+                <button
+                  style={{
+                    padding:"7px 20px", background:"#4DB1B3", color:"#fff", border:"none",
+                    borderRadius:8, fontSize:"1em", fontWeight:600, cursor:"pointer", boxShadow:"0 1px 5px #0195d62c"
+                  }}
+                  onClick={()=>downloadJSON(showModal.content)}
+                >Download</button>
+                <button
+                  style={{
+                    padding:"7px 18px", background:"#fff", color:"#254a9a", border:"1.5px solid #254a9a",
+                    borderRadius:8, fontSize:"1em", fontWeight:500, cursor:"pointer", boxShadow:"none"
+                  }}
+                  onClick={()=>setShowModal(null)}
+                >Close</button>
               </div>
             </>}
             {showModal.type==="import" && <>
-              <h3 style={{marginTop:0}}>Import Config</h3>
-              <textarea style={{width:"100%", height:120, fontSize:"1em"}} placeholder="Paste config JSON here"
-                value={showModal.content} onChange={e=>setShowModal(m=>({...m, content:e.target.value}))}></textarea>
-              <div style={{textAlign:"right",marginTop:16}}>
-                <button className="btn" onClick={()=>importJSON(showModal.content)}>Import</button>
-                <button className="btn" style={{marginLeft:10}} onClick={()=>setShowModal(null)}>Cancel</button>
+              <h3 style={{marginTop:0, color:"#254a9a"}}>Import Config</h3>
+              <textarea
+                style={{
+                  width:"100%", height:120, fontSize:"1em", background:"#F4FAFD",
+                  borderRadius:7, border:"1.3px solid #e3e8ee", color:"#333", marginBottom:14
+                }}
+                placeholder="Paste config JSON here"
+                value={showModal.content}
+                onChange={e=>setShowModal(m=>({...m, content:e.target.value}))}
+              ></textarea>
+              <div style={{display:"flex", gap:10, marginTop:10, justifyContent:"flex-end", alignItems:"center"}}>
+                <input
+                  id="fileInput"
+                  type="file"
+                  accept=".json,application/json"
+                  style={{display:"none"}}
+                  onChange={e=>{
+                    const file = e.target.files && e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        setShowModal(m=>({...m, content: ev.target.result}));
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                />
+                <button
+                  style={{
+                    padding:"7px 20px", background:"#fffbb9", color:"#254a9a", border:"1.5px solid #e3e8ee",
+                    borderRadius:8, fontSize:"1em", fontWeight:600, cursor:"pointer"
+                  }}
+                  onClick={() => document.getElementById("fileInput").click()}
+                >Load File</button>
+                <button
+                  style={{
+                    padding:"7px 20px", background:"#4DB1B3", color:"#fff", border:"none",
+                    borderRadius:8, fontSize:"1em", fontWeight:600, cursor:"pointer"
+                  }}
+                  onClick={()=>importJSON(showModal.content)}
+                >Import</button>
+                <button
+                  style={{
+                    padding:"7px 18px", background:"#fff", color:"#254a9a", border:"1.5px solid #254a9a",
+                    borderRadius:8, fontSize:"1em", fontWeight:500, cursor:"pointer"
+                  }}
+                  onClick={()=>setShowModal(null)}
+                >Cancel</button>
               </div>
             </>}
           </div>
         </div>
       )}
+      {/* Add/Edit Node dialog */}
       {addPanel.visible && (
-        <div className="modal" onClick={()=>setAddPanel(a=>({...a,visible:false}))}>
-          <div className="modal-content" onClick={e=>e.stopPropagation()}>
-            <div style={{fontWeight:600,marginBottom:8, fontSize:"1.07em"}}>Add {addType==="source"?"Source":"Node"}</div>
-            {addType==="normal" &&
-              <div>
-                Inputs: <input type="number" min={0} max={6} style={{width:40}} value={newInputs} onChange={e=>setNewInputs(Math.max(0,Math.min(6,parseInt(e.target.value)||0)))} />
-                &nbsp; Outputs: <input type="number" min={0} max={6} style={{width:40}} value={newOutputs} onChange={e=>setNewOutputs(Math.max(0,Math.min(6,parseInt(e.target.value)||0)))} />
+        <div className="modal" onClick={() => setAddPanel(a => ({ ...a, visible: false }))}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 16, fontSize: "1.16em", color: "#254a9a" }}>
+              {addPanel.nodeId ? "Edit Node" : `Add ${addType === "source" ? "Source" : "Node"}`}
+            </div>
+            {addType === "normal" && (
+              <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 20 }}>
+                <label style={{ fontSize: "1em", color: "#254a9a" }}>Inputs:</label>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <button
+                    style={{
+                      fontSize: "1.4em",
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      border: "1.5px solid #254a9a",
+                      background: "#fff",
+                      color: "#254a9a",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setNewInputs(v => Math.max(0, v - 1))}
+                  >−</button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={6}
+                    style={{
+                      width: 52,
+                      padding: 6,
+                      borderRadius: 6,
+                      border: "1.2px solid #ddd",
+                      fontSize: "1.08em",
+                      margin: "0 7px",
+                      textAlign: "center",
+                    }}
+                    value={newInputs}
+                    onChange={e => setNewInputs(Math.max(0, Math.min(6, parseInt(e.target.value) || 0)))}
+                  />
+                  <button
+                    style={{
+                      fontSize: "1.4em",
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      border: "1.5px solid #254a9a",
+                      background: "#fff",
+                      color: "#254a9a",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setNewInputs(v => Math.min(6, v + 1))}
+                  >+</button>
+                </div>
+                <label style={{ fontSize: "1em", color: "#254a9a" }}>Outputs:</label>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <button
+                    style={{
+                      fontSize: "1.4em",
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      border: "1.5px solid #254a9a",
+                      background: "#fff",
+                      color: "#254a9a",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setNewOutputs(v => Math.max(0, v - 1))}
+                  >−</button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={6}
+                    style={{
+                      width: 52,
+                      padding: 6,
+                      borderRadius: 6,
+                      border: "1.2px solid #ddd",
+                      fontSize: "1.08em",
+                      margin: "0 7px",
+                      textAlign: "center",
+                    }}
+                    value={newOutputs}
+                    onChange={e => setNewOutputs(Math.max(0, Math.min(6, parseInt(e.target.value) || 0)))}
+                  />
+                  <button
+                    style={{
+                      fontSize: "1.4em",
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      border: "1.5px solid #254a9a",
+                      background: "#fff",
+                      color: "#254a9a",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setNewOutputs(v => Math.min(6, v + 1))}
+                  >+</button>
+                </div>
               </div>
-            }
-            <button className="btn" style={{marginTop:16}} onClick={confirmAddNode}>Create</button>
-            <button className="btn" style={{marginTop:16,marginLeft:10,background:'#254a9a'}} onClick={()=>setAddPanel(a=>({...a,visible:false}))}>Cancel</button>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 18, justifyContent: "flex-end" }}>
+              <button
+                style={{
+                  padding: "9px 24px", background: "#4DB1B3", color: "#fff", border: "none",
+                  borderRadius: 8, fontSize: "1.08em", fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 7px #0195d63d"
+                }}
+                onClick={() => {
+                  if (addPanel.nodeId) {
+                    // --- Edit existing node ---
+                    setNodes(nodes => nodes.map(n => {
+                      if (n.id !== addPanel.nodeId) return n;
+                      return {
+                        ...n,
+                        inputs: Array.from({ length: newInputs }, (_, i) => n.inputs[i] || { id: `i${i}`, label: `In${i + 1}` }),
+                        outputs: Array.from({ length: newOutputs }, (_, i) => n.outputs[i] || { id: `o${i}`, label: `Out${i + 1}` }),
+                      };
+                    }));
+                    // Remove wires that no longer fit
+                    setWires(wires => wires.filter(w =>
+                      !(w.from.nodeId === addPanel.nodeId && w.from.outputIdx >= newOutputs) &&
+                      !(w.to.nodeId === addPanel.nodeId && w.to.inputIdx >= newInputs)
+                    ));
+                  } else {
+                    // --- Add new node ---
+                    const cx = (window.innerWidth / 2 - pan.x) / zoom;
+                    const cy = (window.innerHeight / 2 - pan.y) / zoom;
+                    setNodes(nodes => [...nodes, createNode(cx, cy, newInputs, newOutputs, addType)]);
+                  }
+                  setAddPanel(a => ({ ...a, visible: false }));
+                  setRenderTick(t => t + 1);
+                }}
+              >{addPanel.nodeId ? "Apply" : "Create"}</button>
+              <button
+                style={{
+                  padding: "9px 20px", background: "#fff", color: "#254a9a", border: "1.7px solid #254a9a",
+                  borderRadius: 8, fontSize: "1.08em", fontWeight: 500, cursor: "pointer", boxShadow: "none"
+                }}
+                onClick={() => setAddPanel(a => ({ ...a, visible: false }))}
+              >Cancel</button>
+            </div>
           </div>
         </div>
       )}
