@@ -5,21 +5,21 @@
   <title>Saint-Gobain Node Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    html, body { height:100%; margin:0; background:#0195D6; font-family:sans-serif; overflow:hidden;}
+    html, body { height:100%; margin:0; background:#ffffff; font-family:sans-serif; overflow:hidden;}
     #root { height:100vh;}
     .toolbar {
       position:fixed; right:32px; bottom:32px; z-index:60; display:flex; flex-direction:row; gap:12px;
       align-items:center;
     }
     .toolbar-btn {
-      background:#fff; border-radius:50%; border:none; width:60px; height:60px;
+      background:#2473be; border-radius:50%; border:none; width:60px; height:60px;
       box-shadow:0 4px 24px #0003; display:flex; align-items:center; justify-content:center;
       cursor:pointer; transition:background 0.15s, box-shadow 0.15s;
       font-size:2.1em; position:relative;
       padding:0;
     }
-    .toolbar-btn.selected { background:#E83430; }
-    .toolbar-btn svg { width:32px; height:32px; fill:#E83430;}
+    .toolbar-btn.selected { background:#2473be; }
+    .toolbar-btn svg { width:32px; height:32px; fill:#ffffff;}
     .toolbar-btn.selected svg { fill:#fff;}
     .toolbar-btn:disabled {opacity:0.5; pointer-events:none;}
     .toolbar-btn .tooltip {
@@ -62,7 +62,7 @@
       box-shadow:0 4px 44px #0008;
     }
     .node {
-      min-width:140px; background:#4DB1B3; border-radius:10px;
+      min-width:140px; background:#2473be; border-radius:10px;
       padding:10px; color:#fff; cursor:grab; border:2.5px solid #254a9a;
       box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:2;
       transition: box-shadow 0.1s, border 0.1s, filter 0.13s;
@@ -88,8 +88,8 @@
     .io-row { display:flex; align-items:center; margin:2px 0; position:relative; height:22px;}
     .io-dot { width:15px; height:15px; border-radius:50%; margin:0; cursor:pointer;
       position:absolute; top:2px; z-index:4; transition:opacity 0.15s;}
-    .io-dot.input { background:#E83430; border:2.5px solid #fff; left:-15px;}
-    .io-dot.output { background:#C5284C; border:2.5px solid #fff; right:-15px;}
+    .io-dot.input { background:#E83430; border:2.5px solid #fff; left:-20px;}
+    .io-dot.output { background:#C5284C; border:2.5px solid #fff; right:-20px;}
     .io-dot:active, .io-dot:focus { box-shadow:0 0 0 4px #E8343040;}
     .io-dot.unconnected { opacity:0.45;}
     .message-dot {
@@ -800,7 +800,7 @@ function App() {
             onClick={()=>setShowAddMenu(m=>!m)}
             style={{zIndex:70}}
           >
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#fffbb9" stroke="#E83430" strokeWidth="1.8"/><path d="M12 7v10m-5-5h10" stroke="#E83430" strokeWidth="2.1" fill="none" strokeLinecap="round"/></svg>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#2473be" stroke="#ffffff" strokeWidth="1.8"/><path d="M12 7v10m-5-5h10" stroke="#ffffff" strokeWidth="2.1" fill="none" strokeLinecap="round"/></svg>
             <span className="tooltip">Add Node/Source</span>
           </button>
           {showAddMenu && (
@@ -816,15 +816,15 @@ function App() {
           disabled={!selected}
           onClick={trashClick}
         >
-          <svg viewBox="0 0 24 24"><path d="M9 3V4H4V6H20V4H15V3H9ZM6 8V20C6 21.1 6.9 22 8 22H16C17.1 22 18 21.1 18 20V8H6ZM8 10H10V18H8V10ZM14 10H16V18H14V10Z"/></svg>
+          <svg viewBox="0 0 24 24"><path fill="#ffffff" d="M9 3V4H4V6H20V4H15V3H9ZM6 8V20C6 21.1 6.9 22 8 22H16C17.1 22 18 21.1 18 20V8H6ZM8 10H10V18H8V10ZM14 10H16V18H14V10Z"/></svg>
           <span className="tooltip">{selected && selected.type==='node' ? "Delete node & wires":"Delete wire"}</span>
         </button>
         <button className="toolbar-btn" title="Export" onClick={exportJSON}>
-          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" stroke="#254a9a" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
           <span className="tooltip">Export</span>
         </button>
         <button className="toolbar-btn" title="Import" onClick={()=>setShowModal({type:'import', content:""})}>
-          <svg viewBox="0 0 24 24"><path d="M12 21V9m0 0l4 4m-4-4l-4 4M4 5h16" stroke="#254a9a" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 21V9m0 0l4 4m-4-4l-4 4M4 5h16" stroke="#ffffff" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
           <span className="tooltip">Import</span>
         </button>
       </div>
