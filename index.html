@@ -163,8 +163,9 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script type="text/babel">
 
-const STORAGE_KEY = "saintgobain_node_editor_config";
-const SG_COLORS = {
+const STORAGE_KEY = "node_editor_config";
+
+const COLORS = {
   blue: "#0195D6",
   blue2: "#254a9a",
   red: "#E83430",
@@ -172,6 +173,51 @@ const SG_COLORS = {
   green: "#4DB1B3",
   orange: "#E66407"
 };
+
+const DEFAULT_CONFIG = {
+  "nodes": [
+    {
+      "id": 3, "x": 841, "y": 109, "title": "Node 3",
+      "type": "normal",
+      "inputs": [{"id":"i0","label":"In1"},{"id":"i1","label":"In2"}],
+      "outputs":[{"id":"o0","label":"Out1"}]
+    },
+    {
+      "id": 4, "x": 373, "y": 233, "title": "Node 4",
+      "type": "normal",
+      "inputs":[{"id":"i0","label":"In1"}],
+      "outputs":[{"id":"o0","label":"Out1"},{"id":"o1","label":"Out2"}]
+    },
+    {
+      "id": 5, "x": 90, "y": 360, "title": "Source", "type": "source",
+      "inputs": [], "outputs":[{"id":"o0","label":"Emit"}]
+    },
+    {
+      "id":1134,"x":807,"y":371.5,"title":"Node 1134","type":"normal",
+      "inputs":[{"id":"i0","label":"In1"},{"id":"i1","label":"In2"}],
+      "outputs":[{"id":"o0","label":"Out1"},{"id":"o1","label":"Out2"},{"id":"o2","label":"Out3"}]
+    },
+    {
+      "id":1135,"x":1528,"y":141.5,"title":"Node 1135","type":"normal",
+      "inputs":[{"id":"i0","label":"In1"}],
+      "outputs":[{"id":"o0","label":"Out1"}]
+    },
+    {
+      "id":1137,"x":103,"y":501.5,"title":"Cyclic Source","type":"cyclic",
+      "inputs":[], "outputs":[{"id":"o0","label":"Emit"}],
+      "freqHz":1, "active":false
+    }
+  ],
+  "wires": [
+    {"from":{"nodeId":5,"outputIdx":0},"to":{"nodeId":4,"inputIdx":0}},
+    {"from":{"nodeId":4,"outputIdx":0},"to":{"nodeId":3,"inputIdx":0}},
+    {"from":{"nodeId":4,"outputIdx":1},"to":{"nodeId":1134,"inputIdx":0}},
+    {"from":{"nodeId":3,"outputIdx":0},"to":{"nodeId":1134,"inputIdx":1}},
+    {"from":{"nodeId":1134,"outputIdx":0},"to":{"nodeId":1135,"inputIdx":0}},
+    {"from":{"nodeId":1137,"outputIdx":0},"to":{"nodeId":4,"inputIdx":0}}
+  ]
+};
+
 let globalNodeId = 3;
 
 // --- Helpers ---
@@ -227,8 +273,12 @@ function createNode(x, y, numInputs, numOutputs, type = "normal", props = {}) {
 
 function App() {
   // ----- Persistence-aware initial load -----
-  let initialNodes = [createNode(120, 120, 2, 1), createNode(350, 260, 1, 2), createNode(90, 360, 0, 1, "source")];
-  let initialWires = [];
+  //let initialNodes = [createNode(120, 120, 2, 1), createNode(350, 260, 1, 2), createNode(90, 360, 0, 1, "source")];
+  //let initialWires = [];
+
+  let initialNodes = DEFAULT_CONFIG.nodes;
+  let initialWires = DEFAULT_CONFIG.wires;
+
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -239,6 +289,11 @@ function App() {
         let maxId = Math.max(0, ...parsed.nodes.map(n=>n.id));
         globalNodeId = maxId+1;
       }
+    }
+    else
+    {
+      // no stored config: sync globalNodeId to DEFAULT_CONFIG
+    globalNodeId = Math.max(0, ...DEFAULT_CONFIG.nodes.map(n=>n.id)) + 1;
     }
   } catch (e) {}
   const [nodes, setNodes] = React.useState(initialNodes);
@@ -687,14 +742,14 @@ return ()=>Object.values(timers).forEach(clearInterval);
                ${p2.x-dx},${p2.y}
                ${p2.x},${p2.y}
             `}
-            stroke={selected && selected.type==='wire' && selected.id===i ? SG_COLORS.red : SG_COLORS.raspberry}
+            stroke={selected && selected.type==='wire' && selected.id===i ? COLORS.red : COLORS.raspberry}
             strokeWidth="4"
             fill="none"
             opacity={selected && selected.type==='wire' && selected.id===i ? "1":"0.88"}
             style={selected && selected.type==='wire' && selected.id===i ? {filter:'drop-shadow(0 0 10px #E83430B0)'} : {}}
           />
-          <circle cx={p1.x} cy={p1.y} r="6" fill={SG_COLORS.raspberry} />
-          <circle cx={p2.x} cy={p2.y} r="6" fill={SG_COLORS.red} />
+          <circle cx={p1.x} cy={p1.y} r="6" fill={COLORS.raspberry} />
+          <circle cx={p2.x} cy={p2.y} r="6" fill={COLORS.red} />
         </g>
       );
     });
@@ -747,7 +802,7 @@ return ()=>Object.values(timers).forEach(clearInterval);
            ${p2.x-dx},${p2.y}
            ${p2.x},${p2.y}
         `}
-        stroke={SG_COLORS.blue2}
+        stroke={COLORS.blue2}
         strokeWidth="3"
         fill="none"
         opacity="0.76"
