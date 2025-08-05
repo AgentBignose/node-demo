@@ -116,6 +116,44 @@
       .logo {left:10px;bottom:10px;}
       .modal-content { min-width:96vw !important;}
     }
+    .checkbox-lg {
+        width: 26px;
+        height: 26px;
+        accent-color: #ffffff;
+        margin-left: 12px;
+        cursor: pointer;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: #fff;
+    }
+    .freq-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    }
+    .freq-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid #254a9a;
+    background: #fff;
+    color: #254a9a;
+    font-size: 1.2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    }
+    .freq-input {
+    width: 48px;
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    font-size: 1em;
+    text-align: center;
+    }
+
   </style>
 </head>
 <body>
@@ -147,16 +185,45 @@ function useNodeRefs(nodes) {
   }, [nodes]);
   return refs.current;
 }
-function createNode(x, y, numInputs, numOutputs, type="normal") {
+function createNode(x, y, numInputs, numOutputs, type = "normal", props = {}) {
+  // For cyclic sources we carry a frequency and active flag
+  const extra = type === "cyclic"
+    ? {
+        freqHz: props.freqHz || 1,
+        active: props.active !== undefined ? props.active : true
+      }
+    : {};
+
   return {
     id: globalNodeId++,
-    x, y,
-    title: type==="source" ? "Source" : "Node " + (globalNodeId - 1),
+    x,
+    y,
+    title:
+      type === "source" ? "Source" :
+      type === "cyclic" ? "Cyclic Source" :
+      "Node " + (globalNodeId - 1),
     type,
-    inputs: type==="source" ? [] : Array.from({length: numInputs}, (_,i)=>({ id: `i${i}`, label:`In${i+1}` })),
-    outputs: Array.from({length: type==="source"?1:numOutputs}, (_,i)=>({ id: `o${i}`, label:type==="source"?"Emit":`Out${i+1}` }))
+    inputs:
+      type === "source" || type === "cyclic"
+        ? []
+        : Array.from({ length: numInputs }, (_, i) => ({
+            id: `i${i}`,
+            label: `In${i + 1}`
+          })),
+    outputs: Array.from(
+      { length: type === "source" || type === "cyclic" ? 1 : numOutputs },
+      (_, i) => ({
+        id: `o${i}`,
+        label:
+          type === "source" || type === "cyclic"
+            ? "Emit"
+            : `Out${i + 1}`
+      })
+    ),
+    ...extra
   };
 }
+
 
 function App() {
   // ----- Persistence-aware initial load -----
@@ -183,6 +250,9 @@ function App() {
   const [addType, setAddType] = React.useState("normal");
   const [newInputs, setNewInputs] = React.useState(1);
   const [newOutputs, setNewOutputs] = React.useState(1);
+  // for cyclic source dialog
+  const [newFreqHz,  setNewFreqHz ] = React.useState(1);
+  const [newActive, setNewActive] = React.useState(true);
   const [showAddMenu, setShowAddMenu] = React.useState(false);
   const [selected, setSelected] = React.useState(null);
   const [showModal, setShowModal] = React.useState(null);
@@ -211,6 +281,18 @@ function App() {
   React.useEffect(() => {
     setTimeout(() => setRenderTick(t => t + 1), 10);
   }, []);
+
+  // Cyclic timers
+React.useEffect(()=>{
+const timers = {};
+nodes.forEach(n=>{
+    if(n.type==="cyclic" && n.active){
+    timers[n.id] = setInterval(()=>emitMessageFrom(n.id,0), 1000/(n.freqHz||1));
+    }
+});
+return ()=>Object.values(timers).forEach(clearInterval);
+}, [nodes]);
+
 
   // ----------- PAN LOGIC -----------
   function onBgMouseDown(e) {
@@ -381,6 +463,9 @@ function App() {
     });
     setNewInputs(1);
     setNewOutputs(1);
+    // reset cyclic defaults
+    setNewFreqHz(1);
+    setNewActive(true);
   }
   function onEditNodeMenu(nodeId) {
     const node = nodes.find(n => n.id === nodeId);
@@ -749,6 +834,26 @@ function App() {
                     {node.title}
                   </div>
                 }
+                {node.type === "cyclic" && (
+                <div style={{ display: "flex", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ fontSize: "0.9em", marginRight: "6px", color: "#fff" }}>On:</label>
+                    <input
+                    type="checkbox"
+                    className="checkbox-lg"
+                    checked={node.active}
+                    onChange={e => {
+                        const checked = e.target.checked;
+                        setNodes(ns =>
+                        ns.map(n =>
+                            n.id === node.id
+                            ? { ...n, active: checked }
+                            : n
+                        )
+                        );
+                    }}
+                    />
+                </div>
+                )}
                 <div>
                   {node.inputs.map((inp,i) => {
                     const isUnconnected = !wires.some(w => w.to.nodeId === node.id && w.to.inputIdx === i);
@@ -807,6 +912,7 @@ function App() {
             <div className="add-menu" onMouseLeave={()=>setShowAddMenu(false)}>
               <button onClick={()=>onAddNodeMenu("normal")}>Add Node</button>
               <button onClick={()=>onAddNodeMenu("source")}>Add Source</button>
+              <button onClick={()=>onAddNodeMenu("cyclic")}>Add Cyclic Source</button>
             </div>
           )}
         </div>
@@ -848,7 +954,7 @@ function App() {
               <div style={{textAlign:"right",marginTop:8, display:"flex", gap:10, justifyContent:"flex-end"}}>
                 <button
                   style={{
-                    padding:"7px 20px", background:"#4DB1B3", color:"#fff", border:"none",
+                    padding:"7px 20px", background:"#2473be", color:"#fff", border:"none",
                     borderRadius:8, fontSize:"1em", fontWeight:600, cursor:"pointer", boxShadow:"0 1px 5px #0195d62c"
                   }}
                   onClick={()=>downloadJSON(showModal.content)}
@@ -899,7 +1005,7 @@ function App() {
                 >Load File</button>
                 <button
                   style={{
-                    padding:"7px 20px", background:"#4DB1B3", color:"#fff", border:"none",
+                    padding:"7px 20px", background:"#2473be", color:"#fff", border:"none",
                     borderRadius:8, fontSize:"1em", fontWeight:600, cursor:"pointer"
                   }}
                   onClick={()=>importJSON(showModal.content)}
@@ -924,129 +1030,130 @@ function App() {
               {addPanel.nodeId ? "Edit Node" : `Add ${addType === "source" ? "Source" : "Node"}`}
             </div>
             {addType === "normal" && (
-              <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 20 }}>
-                <label style={{ fontSize: "1em", color: "#254a9a" }}>Inputs:</label>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <button
-                    style={{
-                      fontSize: "1.4em",
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      border: "1.5px solid #254a9a",
-                      background: "#fff",
-                      color: "#254a9a",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setNewInputs(v => Math.max(0, v - 1))}
-                  >−</button>
-                  <input
-                    type="number"
-                    min={0}
-                    max={6}
-                    style={{
-                      width: 52,
-                      padding: 6,
-                      borderRadius: 6,
-                      border: "1.2px solid #ddd",
-                      fontSize: "1.08em",
-                      margin: "0 7px",
-                      textAlign: "center",
-                    }}
+                <div className="freq-controls">
+                    <label style={{ fontSize:"1em", color:"#254a9a" }}>Inputs:</label>
+                    <button className="freq-btn" onClick={() => setNewInputs(v => Math.max(0, v - 1))}>−</button>
+                    <input
+                    type="number" min={0} max={6}
+                    className="freq-input"
                     value={newInputs}
-                    onChange={e => setNewInputs(Math.max(0, Math.min(6, parseInt(e.target.value) || 0)))}
-                  />
-                  <button
-                    style={{
-                      fontSize: "1.4em",
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      border: "1.5px solid #254a9a",
-                      background: "#fff",
-                      color: "#254a9a",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setNewInputs(v => Math.min(6, v + 1))}
-                  >+</button>
-                </div>
-                <label style={{ fontSize: "1em", color: "#254a9a" }}>Outputs:</label>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <button
-                    style={{
-                      fontSize: "1.4em",
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      border: "1.5px solid #254a9a",
-                      background: "#fff",
-                      color: "#254a9a",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setNewOutputs(v => Math.max(0, v - 1))}
-                  >−</button>
-                  <input
-                    type="number"
-                    min={0}
-                    max={6}
-                    style={{
-                      width: 52,
-                      padding: 6,
-                      borderRadius: 6,
-                      border: "1.2px solid #ddd",
-                      fontSize: "1.08em",
-                      margin: "0 7px",
-                      textAlign: "center",
-                    }}
+                    onChange={e => setNewInputs(Math.max(0, Math.min(6, parseInt(e.target.value)||0)))}
+                    />
+                    <button className="freq-btn" onClick={() => setNewInputs(v => Math.min(6, v + 1))}>+</button>
+
+                    <label style={{ fontSize:"1em", color:"#254a9a", marginLeft: "24px" }}>Outputs:</label>
+                    <button className="freq-btn" onClick={() => setNewOutputs(v => Math.max(0, v - 1))}>−</button>
+                    <input
+                    type="number" min={0} max={6}
+                    className="freq-input"
                     value={newOutputs}
-                    onChange={e => setNewOutputs(Math.max(0, Math.min(6, parseInt(e.target.value) || 0)))}
-                  />
-                  <button
-                    style={{
-                      fontSize: "1.4em",
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      border: "1.5px solid #254a9a",
-                      background: "#fff",
-                      color: "#254a9a",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setNewOutputs(v => Math.min(6, v + 1))}
-                  >+</button>
+                    onChange={e => setNewOutputs(Math.max(0, Math.min(6, parseInt(e.target.value)||0)))}
+                    />
+                    <button className="freq-btn" onClick={() => setNewOutputs(v => Math.min(6, v + 1))}>+</button>
                 </div>
-              </div>
+            )}
+            {addType==="cyclic" && (
+                <div>
+                    <div style={{marginBottom:14, color:"#254a9a", fontWeight:500}}>Cyclic Source Properties</div>
+                    <div className="freq-controls">
+                    <label>Frequency (Hz):</label>
+                    <button className="freq-btn"
+                        onClick={() => setNewFreqHz(v => Math.max(0.5, +(Math.round((v-0.5)*2)/2).toFixed(1)))}
+                    >−</button>
+                    <input
+                        type="number" step="0.5" min={0.5} max={10}
+                        className="freq-input"
+                        value={newFreqHz}
+                        onChange={e=>{
+                        let v=parseFloat(e.target.value)||1;
+                        setNewFreqHz(Math.max(0.5, Math.min(10, Math.round(v*2)/2)));
+                        }}
+                    />
+                    <button className="freq-btn"
+                        onClick={() => setNewFreqHz(v => Math.min(10, +(Math.round((v+0.5)*2)/2).toFixed(1)))}
+                    >+</button>
+                    {/* Removing Checkbox from Edit Node Dialog since its in node now
+                    <label style={{marginLeft:22}}>Active:</label>
+                    <input
+                        type="checkbox"
+                        className="checkbox-lg"
+                        checked={newActive}
+                        onChange={e=>setNewActive(e.target.checked)}
+                    />*/}
+                    </div>
+                </div>
             )}
             <div style={{ display: "flex", gap: 12, marginTop: 18, justifyContent: "flex-end" }}>
               <button
                 style={{
-                  padding: "9px 24px", background: "#4DB1B3", color: "#fff", border: "none",
-                  borderRadius: 8, fontSize: "1.08em", fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 7px #0195d63d"
+                    padding: "7px 20px",
+                    background: "#2473be",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: "1em",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    boxShadow: "0 1px 5px #0195d62c"
                 }}
                 onClick={() => {
-                  if (addPanel.nodeId) {
-                    // --- Edit existing node ---
-                    setNodes(nodes => nodes.map(n => {
-                      if (n.id !== addPanel.nodeId) return n;
-                      return {
-                        ...n,
-                        inputs: Array.from({ length: newInputs }, (_, i) => n.inputs[i] || { id: `i${i}`, label: `In${i + 1}` }),
-                        outputs: Array.from({ length: newOutputs }, (_, i) => n.outputs[i] || { id: `o${i}`, label: `Out${i + 1}` }),
-                      };
-                    }));
-                    // Remove wires that no longer fit
-                    setWires(wires => wires.filter(w =>
-                      !(w.from.nodeId === addPanel.nodeId && w.from.outputIdx >= newOutputs) &&
-                      !(w.to.nodeId === addPanel.nodeId && w.to.inputIdx >= newInputs)
-                    ));
-                  } else {
-                    // --- Add new node ---
+                    // -- Editing an existing node?
+                    if (addPanel.nodeId) {
+                    setNodes(nodes =>
+                        nodes.map(n => {
+                        if (n.id !== addPanel.nodeId) return n;
+                        if (addType === "cyclic") {
+                            // update cyclic props
+                            return { ...n, freqHz: newFreqHz, active: newActive };
+                        }
+                        // update normal node I/O
+                        return {
+                            ...n,
+                            inputs: Array.from({ length: newInputs }, (_, i) =>
+                            n.inputs[i] || { id: `i${i}`, label: `In${i + 1}` }
+                            ),
+                            outputs: Array.from({ length: newOutputs }, (_, i) =>
+                            n.outputs[i] || { id: `o${i}`, label: `Out${i + 1}` }
+                            )
+                        };
+                        })
+                    );
+                    // remove any wires that no longer fit
+                    if (addType === "normal") {
+                        setWires(ws =>
+                        ws.filter(
+                            w =>
+                            w.from.nodeId !== addPanel.nodeId ||
+                            w.from.outputIdx < newOutputs
+                        ).filter(
+                            w =>
+                            w.to.nodeId !== addPanel.nodeId ||
+                            w.to.inputIdx < newInputs
+                        )
+                        );
+                    }
+                    } else {
+                    // -- Creating a brand-new node --
                     const cx = (window.innerWidth / 2 - pan.x) / zoom;
                     const cy = (window.innerHeight / 2 - pan.y) / zoom;
-                    setNodes(nodes => [...nodes, createNode(cx, cy, newInputs, newOutputs, addType)]);
-                  }
-                  setAddPanel(a => ({ ...a, visible: false }));
-                  setRenderTick(t => t + 1);
+                    if (addType === "cyclic") {
+                        setNodes(ns => [
+                        ...ns,
+                        createNode(cx, cy, 0, 1, "cyclic", {
+                            freqHz: newFreqHz,
+                            active: newActive
+                        })
+                        ]);
+                    } else {
+                        setNodes(ns => [
+                        ...ns,
+                        createNode(cx, cy, newInputs, newOutputs, addType)
+                        ]);
+                    }
+                    }
+                    // close panel & trigger re-render of wires
+                    setAddPanel(p => ({ ...p, visible: false }));
+                    setRenderTick(t => t + 1);
                 }}
               >{addPanel.nodeId ? "Apply" : "Create"}</button>
               <button
